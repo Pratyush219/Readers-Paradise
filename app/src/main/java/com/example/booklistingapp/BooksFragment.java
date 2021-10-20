@@ -3,14 +3,15 @@ package com.example.booklistingapp;
 import android.content.Context;
 import android.content.Intent;
 import android.net.ConnectivityManager;
-import android.net.Network;
-import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.Menu;
+import android.view.MenuInflater;
+import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.EditText;
@@ -20,18 +21,23 @@ import android.widget.Toast;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.appcompat.app.AppCompatActivity;
 import androidx.fragment.app.Fragment;
+import androidx.lifecycle.Observer;
 import androidx.lifecycle.ViewModelProvider;
 import androidx.navigation.NavController;
 import androidx.navigation.Navigation;
 import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
+import com.example.booklistingapp.Fetch.BookInfo;
 import com.example.booklistingapp.Fetch.MyAdapter;
 import com.example.booklistingapp.FilterLogic.FilterAdapter;
 import com.example.booklistingapp.FilterLogic.FilterViewModel;
+import com.example.booklistingapp.favourites.FavouriteBooksReference;
+import com.example.booklistingapp.favourites.FavouriteItem;
 
-import java.util.ArrayList;
+import java.util.List;
 import java.util.Objects;
 
 
@@ -53,14 +59,17 @@ public class BooksFragment extends Fragment implements MyAdapter.OnBookListener 
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
 
+        setHasOptionsMenu(true);
         model = new ViewModelProvider(requireActivity()).get(FilterViewModel.class);
         model.init();
+        Objects.requireNonNull(((AppCompatActivity) requireActivity()).getSupportActionBar()).setDisplayHomeAsUpEnabled(true);
+        Objects.requireNonNull(((AppCompatActivity) requireActivity()).getSupportActionBar()).setTitle("Books");
         //Set up RecyclerView
         RecyclerView appliedFilters = view.findViewById(R.id.applied_filters);
         RecyclerView bookList = view.findViewById(R.id.book_list);
 
         FilterAdapter adapter = new FilterAdapter(requireActivity());
-        MyAdapter myAdapter = new MyAdapter(this);
+        MyAdapter myAdapter = new MyAdapter(this, requireActivity());
 
         TextView introView = view.findViewById(R.id.intro);
         TextView errorView = view.findViewById(R.id.no_internet);
@@ -79,7 +88,7 @@ public class BooksFragment extends Fragment implements MyAdapter.OnBookListener 
 
         ConnectivityManager manager = (ConnectivityManager) requireContext().getSystemService(Context.CONNECTIVITY_SERVICE);
         NetworkInfo network = manager.getActiveNetworkInfo();
-        if(network == null || !network.isConnectedOrConnecting()){
+        if (network == null || !network.isConnectedOrConnecting()) {
             errorView.setVisibility(View.VISIBLE);
             introView.setVisibility(View.GONE);
             bookList.setVisibility(View.GONE);
@@ -87,35 +96,42 @@ public class BooksFragment extends Fragment implements MyAdapter.OnBookListener 
 
         liveData = new ConnectionLiveData(requireContext());
 
+        if (!MainActivity.favouritesViewModel.isLaunched()) {
+            MainActivity.favouritesViewModel.fetchAll().observe(requireActivity(), new Observer<List<FavouriteItem>>() {
+                @Override
+                public void onChanged(List<FavouriteItem> favouriteItems) {
+                    for (int i = 0; i < favouriteItems.size(); i++) {
+                        FavouriteBooksReference.favouriteBooksUrls.add(favouriteItems.get(i).getBookUrl());
+                    }
+                    MainActivity.favouritesViewModel.setLaunched(true);
+//                    introView.setText("Arrived");
+                }
+            });
+        }
         liveData.observe(getViewLifecycleOwner(), aBoolean -> {
-            if(aBoolean){
+            if (aBoolean) {
                 errorView.setVisibility(View.GONE);
-                if(bookList.getChildCount() == 0){
+                if (bookList.getChildCount() == 0) {
                     bookList.setVisibility(View.GONE);
                     introView.setVisibility(View.VISIBLE);
-                }
-                else{
+                } else {
                     introView.setVisibility(View.GONE);
                     bookList.setVisibility(View.VISIBLE);
                 }
-            }
-            else{
+            } else {
                 bookList.setVisibility(View.GONE);
                 introView.setVisibility(View.GONE);
                 errorView.setVisibility(View.VISIBLE);
             }
         });
         //Observe filterList LiveData and update FilterRecyclerView
-        model.getFilters().observe(getViewLifecycleOwner(), strings -> {
-            ArrayList<String> filters = new ArrayList<>(strings);
-            adapter.setFilters(filters);
-        });
+        model.getFilters().observe(getViewLifecycleOwner(), adapter::setFilters);
         ImageButton search = view.findViewById(R.id.search_button);
         searchField = view.findViewById(R.id.search_field);
         searchField.setText(model.getSearchRequest());
 
         search.setOnClickListener((v) -> {
-            Log.i("Searched", searchField.getText().toString());
+                    Log.i("Searched", searchField.getText().toString());
                     if (searchField.getText() != null && searchField.getText().length() > 0) {
                         model.setSearchRequest(searchField.getText().toString());
                         model.fetchBooks();
@@ -126,13 +142,12 @@ public class BooksFragment extends Fragment implements MyAdapter.OnBookListener 
                 }
         );
         model.getBookInfoList().observe(getViewLifecycleOwner(), infos -> {
-            if(infos.size() > 0){
+            if (infos.size() > 0) {
                 bookList.setVisibility(View.VISIBLE);
                 introView.setVisibility(View.GONE);
                 errorView.setVisibility(View.GONE);
                 myAdapter.setBooks(infos);
-            }
-            else{
+            } else {
                 noResultsView.setVisibility(View.VISIBLE);
                 bookList.setVisibility(View.GONE);
                 introView.setVisibility(View.GONE);
@@ -151,17 +166,29 @@ public class BooksFragment extends Fragment implements MyAdapter.OnBookListener 
                 navController.navigate(R.id.action_booksFragment_to_filterFragment);
         });
 
-        ImageButton upButton = view.findViewById(R.id.up_button);
-        upButton.setOnClickListener(v -> requireActivity().onBackPressed());
-
     }
 
     @Override
-    public void onBookClick(int position) {
-        String bookUrl = Objects.requireNonNull(model.getBookInfoList().getValue()).get(position).getBookUrl();
+    public void onBookClick(BookInfo bookInfo) {
+        String bookUrl = bookInfo.getBookUrl();
         Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(bookUrl));
-        if(intent.resolveActivity(requireActivity().getPackageManager()) != null){
+        if (intent.resolveActivity(requireActivity().getPackageManager()) != null) {
             requireActivity().startActivity(intent);
         }
+    }
+
+    @Override
+    public void onCreateOptionsMenu(@NonNull Menu menu, @NonNull MenuInflater inflater) {
+        inflater.inflate(R.menu.go_to_favourites_list, menu);
+        super.onCreateOptionsMenu(menu, inflater);
+    }
+
+    @Override
+    public boolean onOptionsItemSelected(@NonNull MenuItem item) {
+        if (item.getItemId() == android.R.id.home) {
+            requireActivity().onBackPressed();
+        } else
+            navController.navigate(R.id.action_booksFragment_to_favouritesFragment);
+        return super.onOptionsItemSelected(item);
     }
 }

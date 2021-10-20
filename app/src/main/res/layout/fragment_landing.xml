@@ -16,7 +16,7 @@
         android:orientation="vertical"
         android:gravity="center_horizontal"
         tools:context=".LandingFragment">
-        <include layout="@layout/toolbar" />
+<!--        <include layout="@layout/toolbar" />-->
 
         <TextView
             android:layout_width="wrap_content"

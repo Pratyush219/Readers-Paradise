@@ -32,8 +32,8 @@ public class LandingFragment extends Fragment {
     public void onViewCreated(@NonNull View view, @Nullable Bundle savedInstanceState) {
         super.onViewCreated(view, savedInstanceState);
         startButton = view.findViewById(R.id.begin);
-        ImageButton btn = view.findViewById(R.id.up_button);
-        btn.setVisibility(View.GONE);
+//        ImageButton btn = view.findViewById(R.id.up_button);
+//        btn.setVisibility(View.GONE);
         navController = Navigation.findNavController(view);
         startButton.setOnClickListener(onClick -> navController.navigate(R.id.action_landingFragment_to_booksFragment));
 

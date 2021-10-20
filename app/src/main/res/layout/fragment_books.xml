@@ -6,7 +6,7 @@
     android:orientation="vertical"
     android:background="@color/color_bg"
     tools:context=".BooksFragment">
-    <include layout="@layout/toolbar" />
+<!--    <include layout="@layout/toolbar" />-->
     <LinearLayout
         style="@style/search_bar"
         android:background="@drawable/search_bar_shape"

@@ -9,6 +9,7 @@ import com.android.volley.RequestQueue;
 import com.android.volley.toolbox.StringRequest;
 import com.example.booklistingapp.ListDefaults;
 import com.example.booklistingapp.R;
+import com.example.booklistingapp.favourites.FavouriteBooksReference;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -27,22 +28,24 @@ public class BooksRepo {
     private BooksRepo(Application mApplication) {
         this.mApplication = mApplication;
     }
-    public static BooksRepo getInstance(Application application){
-        if(mInstance == null) mInstance = new BooksRepo(application);
+
+    public static BooksRepo getInstance(Application application) {
+        if (mInstance == null) mInstance = new BooksRepo(application);
         return mInstance;
     }
 
-    public void fetchBooks(String search, List<String> filters, BooksUpdater updater){
-        if(search == null || search.equals("")) return;
+    public void fetchBooks(String search, List<String> filters, BooksUpdater updater) {
+
+        if (search == null || search.equals("")) return;
         bookInfos.clear();
         int c = 0;
         boolean hasEnglishFilter = true;
-        for(int i = 0; i < filters.size(); i++){
-            if(ListDefaults.languages.containsKey(filters.get(i))){
+        for (int i = 0; i < filters.size(); i++) {
+            if (ListDefaults.languages.containsKey(filters.get(i))) {
                 c++;
             }
         }
-        if(c > 0 && !filters.contains("English")) hasEnglishFilter = false;
+        if (c > 0 && !filters.contains("English")) hasEnglishFilter = false;
         Log.i("LanguageFIlters", hasEnglishFilter + "");
         String refactoredSearchString = search.toLowerCase().replace(" ", "+");
         String initialURI = "https://www.googleapis.com/books/v1/volumes?q=";
@@ -55,20 +58,19 @@ public class BooksRepo {
         StringBuilder searchAppendedString = new StringBuilder(initialURI);
         RequestQueue queue = VolleySingleton.getInstance(mApplication).getRequestQueue();
         searchAppendedString.append(refactoredSearchString);
-        for(int i = -1; i < filters.size(); i++){
+        for (int i = -1; i < filters.size(); i++) {
             String key = mApplication.getString(R.string.api_key);
-            if(i == -1){
+            if (i == -1) {
                 searchQuery = searchAppendedString + fields + key + maxResults;
-            }
-            else if(ListDefaults.categories.contains(filters.get(i))){
+            } else if (ListDefaults.categories.contains(filters.get(i))) {
                 addFilter = filters.get(i).toLowerCase().replace(" ", "+");
                 searchQuery = searchAppendedString + subjectHeader + addFilter + fields + key + maxResults;
-            }
-            else{
+            } else {
                 addFilter = Objects.requireNonNull(ListDefaults.languages.get(filters.get(i))).toLowerCase();
                 searchQuery = searchAppendedString + languageHeader + addFilter + fields + key + maxResults;
             }
 
+            Log.i("SearchQuery", searchQuery);
             boolean finalHasEnglishFilter = hasEnglishFilter;
             StringRequest request = new StringRequest(
                     Request.Method.GET,
@@ -95,16 +97,18 @@ public class BooksRepo {
                                     thumbnailUrl = item1.getJSONObject("volumeInfo").getJSONObject("imageLinks").getString("thumbnail");
                                 } catch (JSONException e) {
                                     e.printStackTrace();
-                                }
-                                finally {
+                                } finally {
                                     String alt = title.toLowerCase();
                                     String[] searchLowerCase = search.toLowerCase().split(" ");
                                     int index = 0;
                                     boolean contains = false;
-                                    while(!contains && index < searchLowerCase.length){
-                                        if(alt.contains(searchLowerCase[index])) {
+                                    while (!contains && index < searchLowerCase.length) {
+                                        if (alt.contains(searchLowerCase[index])) {
                                             contains = true;
-                                            BookInfo info = new BookInfo(title, bookUrl, thumbnailUrl, language, authorNames);
+                                            BookInfo info = new BookInfo(title, bookUrl, thumbnailUrl, language, authorNames.toString());
+                                            if (FavouriteBooksReference.favouriteBooksUrls.contains(bookUrl)) {
+                                                info.setFavourite(true);
+                                            }
                                             if (!hasEntry(info)) bookInfos.add(info);
                                         }
                                         index++;
@@ -112,7 +116,7 @@ public class BooksRepo {
                                     j++;
                                 }
                             }
-                            if(!finalHasEnglishFilter) onLanguageFirstSelection();
+                            if (!finalHasEnglishFilter) onLanguageFirstSelection();
                             Collections.shuffle(bookInfos);
                             updater.updateBooks(bookInfos);
                         } catch (JSONException e) {
@@ -123,23 +127,24 @@ public class BooksRepo {
             queue.add(request);
         }
     }
+
+    //TODO: Is this necessary?
     private boolean hasEntry(BookInfo info) {
         String tgt = info.getName();
-        for(BookInfo obj1: bookInfos){
+        for (BookInfo obj1 : bookInfos) {
             String src = obj1.getName();
-            if(src.equals(tgt))
+            if (src.equals(tgt))
                 return true;
         }
         return false;
     }
 
-    private void onLanguageFirstSelection(){
+    private void onLanguageFirstSelection() {
         int i = 0;
-        while(i < bookInfos.size()){
-            if(bookInfos.get(i).getLanguageCode().equals("en")){
+        while (i < bookInfos.size()) {
+            if (bookInfos.get(i).getLanguageCode().equals("en")) {
                 bookInfos.remove(i);
-            }
-            else{
+            } else {
                 i++;
             }
         }
